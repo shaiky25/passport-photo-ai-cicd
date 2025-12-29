@@ -1,0 +1,48 @@
+{
+  "summary": {
+    "total_errors": 1,
+    "critical_errors": 1,
+    "recoveries_attempted": 1,
+    "recoveries_successful": 1,
+    "cleanup_actions": 2,
+    "pipeline_stage": "test-stage"
+  },
+  "errors": [
+    {
+      "error_id": "ERR-1766966439-0",
+      "timestamp": "2025-12-28T18:00:39.152581",
+      "stage": "test-stage",
+      "error_type": "ConnectionError",
+      "error_message": "AWS connection failed",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/faiz/Downloads/passport-photo-ai-new-face-detection/passport-photo-ai/backend_enhanced/scripts/error_handler.py\", line 443, in main\n    raise ConnectionError(\"AWS connection failed\")\nConnectionError: AWS connection failed\n",
+      "context": {
+        "test": "error handling"
+      },
+      "critical": true,
+      "recovery_attempted": true,
+      "recovery_successful": true
+    }
+  ],
+  "recoveries": [],
+  "cleanup": [
+    {
+      "cleanup_action": "Cleanup Temporary Files",
+      "timestamp": "2025-12-28T18:00:42.165921",
+      "success": true,
+      "details": {
+        "execution_time": 0.0020461082458496094
+      }
+    },
+    {
+      "cleanup_action": "Cleanup Old Test Results",
+      "timestamp": "2025-12-28T18:00:42.168321",
+      "success": true,
+      "details": {
+        "execution_time": 5.316734313964844e-05
+      }
+    }
+  ],
+  "recommendations": [
+    "Check network connectivity and AWS service availability"
+  ]
+}

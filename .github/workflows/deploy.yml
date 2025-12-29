@@ -1,0 +1,327 @@
+name: CI/CD Pipeline - Passport Photo AI Enhanced Backend
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      skip_tests:
+        description: 'Skip tests (for emergency deployments)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  AWS_REGION: us-east-1
+  PYTHON_VERSION: '3.9'
+  NODE_VERSION: '18'
+
+jobs:
+  pre-deployment:
+    name: Pre-Deployment Validation
+    runs-on: ubuntu-latest
+    outputs:
+      deployment-ready: ${{ steps.validation.outputs.ready }}
+      environment: ${{ steps.config.outputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Configure environment
+        id: config
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/develop" ]; then
+            echo "environment=staging" >> $GITHUB_OUTPUT
+          else
+            echo "environment=dev" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+            
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-hypothesis safety bandit boto3 requests
+          
+      - name: Run dependency validation
+        run: |
+          echo "Running dependency validation..."
+          python scripts/validate_dependencies.py
+          
+      - name: Run security scan
+        run: |
+          echo "Running security scan..."
+          safety check
+          bandit -r . -f json -o security-report.json || true
+          
+      - name: Run local tests
+        if: ${{ !github.event.inputs.skip_tests }}
+        run: |
+          echo "Running local tests..."
+          python scripts/run_local_tests.py
+          
+      - name: Process test images
+        if: ${{ !github.event.inputs.skip_tests }}
+        run: |
+          echo "Processing test images..."
+          python scripts/validate_image_processing.py
+          
+      - name: Set validation result
+        id: validation
+        run: |
+          echo "ready=true" >> $GITHUB_OUTPUT
+          
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: pre-deployment-results
+          path: |
+            security-report.json
+            test-results/
+            
+  infrastructure:
+    name: Infrastructure Provisioning
+    needs: pre-deployment
+    if: needs.pre-deployment.outputs.deployment-ready == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      infrastructure-ready: ${{ steps.provision.outputs.ready }}
+      stack-name: ${{ steps.provision.outputs.stack-name }}
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Validate CloudFormation template
+        run: |
+          echo "Validating CloudFormation template..."
+          aws cloudformation validate-template --template-body file://cloudformation-enhanced.yaml
+          
+      - name: Deploy infrastructure
+        id: provision
+        run: |
+          echo "Deploying infrastructure..."
+          STACK_NAME="passport-photo-ai-${{ needs.pre-deployment.outputs.environment }}"
+          echo "stack-name=$STACK_NAME" >> $GITHUB_OUTPUT
+          
+          # Use the infrastructure deployment script
+          python scripts/deploy_infrastructure.py \
+            $STACK_NAME \
+            cloudformation-enhanced.yaml \
+            ${{ needs.pre-deployment.outputs.environment }} \
+            ${{ env.AWS_REGION }}
+          
+          echo "ready=true" >> $GITHUB_OUTPUT
+          
+      - name: Get stack outputs
+        run: |
+          aws cloudformation describe-stacks \
+            --stack-name ${{ steps.provision.outputs.stack-name }} \
+            --query 'Stacks[0].Outputs' > stack-outputs.json
+          cat stack-outputs.json
+          
+      - name: Upload infrastructure results
+        uses: actions/upload-artifact@v3
+        with:
+          name: infrastructure-results
+          path: stack-outputs.json
+          
+  deployment:
+    name: Application Deployment
+    needs: [pre-deployment, infrastructure]
+    if: needs.infrastructure.outputs.infrastructure-ready == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      deployment-url: ${{ steps.deploy.outputs.url }}
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install boto3 requests
+          
+      - name: Create source bundle
+        run: |
+          echo "Creating source bundle..."
+          python scripts/create_source_bundle.py
+          
+      - name: Upload to S3
+        run: |
+          echo "Uploading source bundle to S3..."
+          APP_NAME="passport-photo-ai-${{ needs.pre-deployment.outputs.environment }}"
+          VERSION_LABEL="v${{ github.run_number }}-${{ github.sha }}"
+          
+          python scripts/upload_to_s3.py \
+            source-bundle.zip \
+            $APP_NAME \
+            $VERSION_LABEL \
+            ${{ needs.pre-deployment.outputs.environment }} \
+            ${{ env.AWS_REGION }}
+          
+      - name: Deploy to Elastic Beanstalk
+        id: deploy
+        run: |
+          echo "Deploying to Elastic Beanstalk..."
+          APP_NAME="passport-photo-ai-${{ needs.pre-deployment.outputs.environment }}"
+          ENV_NAME="passport-photo-ai-${{ needs.pre-deployment.outputs.environment }}-env"
+          VERSION_LABEL="v${{ github.run_number }}-${{ github.sha }}"
+          
+          # Get S3 info from deployment-info.json created by upload script
+          if [ -f deployment-info.json ]; then
+            S3_BUCKET=$(cat deployment-info.json | jq -r '.bucket_name')
+            S3_KEY=$(cat deployment-info.json | jq -r '.object_key')
+          else
+            S3_BUCKET="$APP_NAME-deployment-${{ secrets.AWS_ACCOUNT_ID }}"
+            S3_KEY="versions/$VERSION_LABEL/source-bundle.zip"
+          fi
+          
+          python scripts/deploy_to_eb.py \
+            $APP_NAME \
+            $ENV_NAME \
+            $VERSION_LABEL \
+            $S3_BUCKET \
+            $S3_KEY \
+            ${{ env.AWS_REGION }}
+            
+          # Get environment URL from deployment results
+          if [ -f deployment-url.txt ]; then
+            URL=$(cat deployment-url.txt)
+            echo "url=$URL" >> $GITHUB_OUTPUT
+          else
+            # Fallback to AWS CLI
+            URL=$(aws elasticbeanstalk describe-environments \
+              --application-name $APP_NAME \
+              --environment-names $ENV_NAME \
+              --query 'Environments[0].CNAME' --output text)
+            echo "url=http://$URL" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Verify deployment
+        run: |
+          echo "Verifying deployment at ${{ steps.deploy.outputs.url }}"
+          curl -f ${{ steps.deploy.outputs.url }}/api/health || exit 1
+          
+  post-deployment:
+    name: Post-Deployment Verification
+    needs: [pre-deployment, deployment]
+    if: needs.deployment.outputs.deployment-url != ''
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pytest pytest-hypothesis pillow
+          
+      - name: Run health checks
+        run: |
+          echo "Running health checks..."
+          python scripts/run_health_checks.py ${{ needs.deployment.outputs.deployment-url }}
+          
+      - name: Test ML/AI features
+        if: ${{ !github.event.inputs.skip_tests }}
+        run: |
+          echo "Testing ML/AI features..."
+          python scripts/test_ml_features.py ${{ needs.deployment.outputs.deployment-url }}
+          
+      - name: Run performance tests
+        if: ${{ !github.event.inputs.skip_tests }}
+        run: |
+          echo "Running performance tests..."
+          python scripts/test_performance.py ${{ needs.deployment.outputs.deployment-url }}
+          
+      - name: Test CORS functionality
+        run: |
+          echo "Testing CORS functionality..."
+          python scripts/test_cors.py ${{ needs.deployment.outputs.deployment-url }}
+          
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: post-deployment-results
+          path: test-results/
+          
+  notify:
+    name: Notification
+    needs: [pre-deployment, infrastructure, deployment, post-deployment]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Notify success
+        if: needs.post-deployment.result == 'success'
+        run: |
+          echo "✅ Deployment successful!"
+          echo "Environment: ${{ needs.pre-deployment.outputs.environment }}"
+          echo "URL: ${{ needs.deployment.outputs.deployment-url }}"
+          
+      - name: Notify failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Check the logs for details."

@@ -1,0 +1,391 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Passport Photo AI - Enhanced Backend Infrastructure with ML/AI capabilities'
+
+Parameters:
+  ApplicationName:
+    Type: String
+    Default: passport-photo-ai-enhanced
+    Description: Name of the Elastic Beanstalk application
+  
+  EnvironmentName:
+    Type: String
+    Default: passport-photo-ai-enhanced-env
+    Description: Name of the Elastic Beanstalk environment
+  
+  InstanceType:
+    Type: String
+    Default: t3.small
+    Description: EC2 instance type for enhanced ML/AI processing
+    AllowedValues:
+      - t3.small
+      - t3.medium
+      - t3.large
+      - m5.large
+      - m5.xlarge
+  
+  AmplifyDomain:
+    Type: String
+    Default: https://main.d3gelc4wjo7dl.amplifyapp.com
+    Description: Amplify frontend domain for CORS configuration
+  
+  KeyPairName:
+    Type: String
+    Default: ''
+    Description: Optional EC2 Key Pair for SSH access
+  
+  SenderEmail:
+    Type: String
+    Default: faiz.24365@gmail.com
+    Description: SES sender email address
+  
+  DynamoDBTableName:
+    Type: String
+    Default: passport-photo-ai-enhanced
+    Description: DynamoDB table name for email validation
+
+Conditions:
+  HasKeyPair: !Not [!Equals [!Ref KeyPairName, '']]
+
+Resources:
+  # S3 Bucket for deployment artifacts
+  DeploymentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ApplicationName}-deployment-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  # DynamoDB Table for email validation
+  EmailValidationTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref DynamoDBTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: TTL
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Application
+          Value: !Ref ApplicationName
+        - Key: Environment
+          Value: enhanced
+
+  # IAM Role for Elastic Beanstalk EC2 instances
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ApplicationName}-ec2-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkMulticontainerDocker
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier
+      Policies:
+        - PolicyName: EnhancedBackendPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # SES permissions for email sending
+              - Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - ses:SendRawEmail
+                  - ses:GetSendQuota
+                  - ses:GetSendStatistics
+                Resource: '*'
+              
+              # DynamoDB permissions
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:BatchGetItem
+                  - dynamodb:BatchWriteItem
+                Resource:
+                  - !GetAtt EmailValidationTable.Arn
+                  - !Sub '${EmailValidationTable.Arn}/index/*'
+              
+              # S3 permissions for deployment bucket
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub '${DeploymentBucket}/*'
+              
+              # CloudWatch Logs permissions
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                  - logs:DescribeLogGroups
+                Resource: '*'
+
+  # Instance Profile for EC2 instances
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub '${ApplicationName}-ec2-profile'
+      Roles:
+        - !Ref EC2InstanceRole
+
+  # IAM Role for Elastic Beanstalk Service
+  ElasticBeanstalkServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ApplicationName}-service-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: elasticbeanstalk.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy
+
+  # Elastic Beanstalk Application
+  ElasticBeanstalkApplication:
+    Type: AWS::ElasticBeanstalk::Application
+    Properties:
+      ApplicationName: !Ref ApplicationName
+      Description: Enhanced Passport Photo AI Backend with ML/AI capabilities
+      ApplicationVersions:
+        - VersionLabel: initial-version
+          Description: Initial application version
+          SourceBundle:
+            S3Bucket: !Ref DeploymentBucket
+            S3Key: application-source.zip
+
+  # Application Version (will be updated by deployment script)
+  ApplicationVersion:
+    Type: AWS::ElasticBeanstalk::ApplicationVersion
+    Properties:
+      ApplicationName: !Ref ElasticBeanstalkApplication
+      VersionLabel: !Sub '${ApplicationName}-${AWS::StackName}-initial'
+      Description: Enhanced backend with OpenCV, rembg, and advanced ML/AI processing
+      SourceBundle:
+        S3Bucket: !Ref DeploymentBucket
+        S3Key: application-source.zip
+
+  # Configuration Template
+  ConfigurationTemplate:
+    Type: AWS::ElasticBeanstalk::ConfigurationTemplate
+    Properties:
+      ApplicationName: !Ref ElasticBeanstalkApplication
+      TemplateName: !Sub '${ApplicationName}-config-template'
+      Description: Enhanced configuration for ML/AI processing
+      SolutionStackName: '64bit Amazon Linux 2 v3.4.24 running Python 3.9'
+      OptionSettings:
+        # Platform settings
+        - Namespace: aws:elasticbeanstalk:container:python
+          OptionName: WSGIPath
+          Value: application.py
+        
+        # Instance settings for enhanced processing
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: InstanceType
+          Value: !Ref InstanceType
+        
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: IamInstanceProfile
+          Value: !Ref EC2InstanceProfile
+        
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: EC2KeyName
+          Value: !If [HasKeyPair, !Ref KeyPairName, !Ref 'AWS::NoValue']
+        
+        # Auto Scaling settings
+        - Namespace: aws:autoscaling:asg
+          OptionName: MinSize
+          Value: '1'
+        
+        - Namespace: aws:autoscaling:asg
+          OptionName: MaxSize
+          Value: '3'
+        
+        # Load Balancer settings
+        - Namespace: aws:elasticbeanstalk:environment
+          OptionName: EnvironmentType
+          Value: LoadBalanced
+        
+        - Namespace: aws:elasticbeanstalk:environment
+          OptionName: LoadBalancerType
+          Value: application
+        
+        # Health checking
+        - Namespace: aws:elasticbeanstalk:healthreporting:system
+          OptionName: SystemType
+          Value: enhanced
+        
+        - Namespace: aws:elasticbeanstalk:application
+          OptionName: Application Healthcheck URL
+          Value: /api/health
+        
+        # Environment variables
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: FLASK_ENV
+          Value: production
+        
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: ALLOWED_ORIGINS
+          Value: !Ref AmplifyDomain
+        
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SES_SENDER_EMAIL
+          Value: !Ref SenderEmail
+        
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: DYNAMODB_TABLE_NAME
+          Value: !Ref DynamoDBTableName
+        
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: AWS_DEFAULT_REGION
+          Value: !Ref 'AWS::Region'
+        
+        # Enhanced processing flags
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: ENABLE_OPENCV
+          Value: 'true'
+        
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: ENABLE_REMBG
+          Value: 'true'
+        
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: ENABLE_ENHANCED_PROCESSING
+          Value: 'true'
+        
+        # Deployment settings
+        - Namespace: aws:elasticbeanstalk:command
+          OptionName: DeploymentPolicy
+          Value: RollingWithAdditionalBatch
+        
+        - Namespace: aws:elasticbeanstalk:command
+          OptionName: BatchSizeType
+          Value: Fixed
+        
+        - Namespace: aws:elasticbeanstalk:command
+          OptionName: BatchSize
+          Value: '1'
+        
+        # Monitoring and logging
+        - Namespace: aws:elasticbeanstalk:cloudwatch:logs
+          OptionName: StreamLogs
+          Value: 'true'
+        
+        - Namespace: aws:elasticbeanstalk:cloudwatch:logs
+          OptionName: DeleteOnTerminate
+          Value: 'false'
+        
+        - Namespace: aws:elasticbeanstalk:cloudwatch:logs
+          OptionName: RetentionInDays
+          Value: '7'
+
+  # Elastic Beanstalk Environment
+  ElasticBeanstalkEnvironment:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      ApplicationName: !Ref ElasticBeanstalkApplication
+      EnvironmentName: !Ref EnvironmentName
+      Description: Enhanced production environment for ML/AI processing
+      TemplateName: !Ref ConfigurationTemplate
+      VersionLabel: !Ref ApplicationVersion
+      Tags:
+        - Key: Application
+          Value: !Ref ApplicationName
+        - Key: Environment
+          Value: enhanced
+        - Key: CostCenter
+          Value: passport-photo-ai
+
+Outputs:
+  ApplicationName:
+    Description: Elastic Beanstalk Application Name
+    Value: !Ref ElasticBeanstalkApplication
+    Export:
+      Name: !Sub '${AWS::StackName}-ApplicationName'
+  
+  EnvironmentName:
+    Description: Elastic Beanstalk Environment Name
+    Value: !Ref ElasticBeanstalkEnvironment
+    Export:
+      Name: !Sub '${AWS::StackName}-EnvironmentName'
+  
+  EnvironmentURL:
+    Description: Environment URL
+    Value: !GetAtt ElasticBeanstalkEnvironment.EndpointURL
+    Export:
+      Name: !Sub '${AWS::StackName}-EnvironmentURL'
+  
+  BackendAPIURL:
+    Description: Backend API URL
+    Value: !Sub 'http://${ElasticBeanstalkEnvironment.EndpointURL}/api'
+    Export:
+      Name: !Sub '${AWS::StackName}-BackendAPIURL'
+  
+  DynamoDBTableName:
+    Description: DynamoDB Table Name
+    Value: !Ref EmailValidationTable
+    Export:
+      Name: !Sub '${AWS::StackName}-DynamoDBTable'
+  
+  DeploymentBucket:
+    Description: S3 Deployment Bucket
+    Value: !Ref DeploymentBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-DeploymentBucket'
+  
+  InstanceType:
+    Description: EC2 Instance Type
+    Value: !Ref InstanceType
+    Export:
+      Name: !Sub '${AWS::StackName}-InstanceType'

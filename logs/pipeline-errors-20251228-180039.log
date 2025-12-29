@@ -1,0 +1,19 @@
+2025-12-28 18:00:39,152 - PipelineErrorHandler - INFO - Error handler initialized
+2025-12-28 18:00:39,152 - PipelineErrorHandler - INFO - Added recovery action: AWS Connection Recovery
+2025-12-28 18:00:39,152 - PipelineErrorHandler - INFO - Added recovery action: Timeout Recovery
+2025-12-28 18:00:39,152 - PipelineErrorHandler - INFO - Added cleanup action: Cleanup Temporary Files
+2025-12-28 18:00:39,152 - PipelineErrorHandler - INFO - Added cleanup action: Cleanup Old Test Results
+2025-12-28 18:00:39,152 - PipelineErrorHandler - INFO - Pipeline stage: test-stage
+2025-12-28 18:00:39,155 - PipelineErrorHandler - CRITICAL - [ERR-1766966439-0] ConnectionError: AWS connection failed
+2025-12-28 18:00:39,155 - PipelineErrorHandler - DEBUG - [ERR-1766966439-0] Context: {
+  "test": "error handling"
+}
+2025-12-28 18:00:39,155 - PipelineErrorHandler - INFO - Starting recovery for error: ERR-1766966439-0
+2025-12-28 18:00:39,155 - PipelineErrorHandler - INFO - Executing recovery: AWS Connection Recovery
+2025-12-28 18:00:42,165 - PipelineErrorHandler - INFO - Recovery successful: AWS Connection Recovery
+2025-12-28 18:00:42,165 - PipelineErrorHandler - INFO - Starting cleanup operations
+2025-12-28 18:00:42,165 - PipelineErrorHandler - INFO - Executing cleanup: Cleanup Temporary Files
+2025-12-28 18:00:42,168 - PipelineErrorHandler - INFO - Cleanup successful: Cleanup Temporary Files
+2025-12-28 18:00:42,168 - PipelineErrorHandler - INFO - Executing cleanup: Cleanup Old Test Results
+2025-12-28 18:00:42,168 - PipelineErrorHandler - INFO - Cleanup successful: Cleanup Old Test Results
+2025-12-28 18:00:42,173 - PipelineErrorHandler - INFO - Error report saved to: test-results/error-report.json

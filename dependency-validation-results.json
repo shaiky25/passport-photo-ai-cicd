@@ -1,0 +1,150 @@
+{
+  "success": true,
+  "errors": [],
+  "warnings": [
+    "Could not run security check (safety not available)"
+  ],
+  "dependencies": {
+    "flask": {
+      "version": "2.3.3",
+      "operator": "==",
+      "line": 6,
+      "raw": "Flask==2.3.3"
+    },
+    "flask-cors": {
+      "version": "4.0.0",
+      "operator": "==",
+      "line": 7,
+      "raw": "Flask-CORS==4.0.0"
+    },
+    "werkzeug": {
+      "version": "2.3.7",
+      "operator": "==",
+      "line": 8,
+      "raw": "Werkzeug==2.3.7"
+    },
+    "pillow": {
+      "version": "10.0.1",
+      "operator": "==",
+      "line": 11,
+      "raw": "Pillow==10.0.1"
+    },
+    "pillow-heif": {
+      "version": "0.13.0",
+      "operator": "==",
+      "line": 12,
+      "raw": "pillow-heif==0.13.0"
+    },
+    "opencv-python-headless": {
+      "version": "4.8.1.78",
+      "operator": "==",
+      "line": 15,
+      "raw": "opencv-python-headless==4.8.1.78"
+    },
+    "numpy": {
+      "version": "1.24.4",
+      "operator": "==",
+      "line": 16,
+      "raw": "numpy==1.24.4"
+    },
+    "rembg": {
+      "version": "2.0.50",
+      "operator": "==",
+      "line": 17,
+      "raw": "rembg==2.0.50"
+    },
+    "onnxruntime": {
+      "version": "1.16.1",
+      "operator": "==",
+      "line": 20,
+      "raw": "onnxruntime==1.16.1"
+    },
+    "scikit-image": {
+      "version": "0.21.0",
+      "operator": "==",
+      "line": 21,
+      "raw": "scikit-image==0.21.0"
+    },
+    "boto3": {
+      "version": "1.29.7",
+      "operator": "==",
+      "line": 24,
+      "raw": "boto3==1.29.7"
+    },
+    "botocore": {
+      "version": "1.32.7",
+      "operator": "==",
+      "line": 25,
+      "raw": "botocore==1.32.7"
+    },
+    "email-validator": {
+      "version": "2.0.0",
+      "operator": "==",
+      "line": 28,
+      "raw": "email-validator==2.0.0"
+    },
+    "python-dotenv": {
+      "version": "1.0.0",
+      "operator": "==",
+      "line": 31,
+      "raw": "python-dotenv==1.0.0"
+    },
+    "requests": {
+      "version": "2.31.0",
+      "operator": "==",
+      "line": 34,
+      "raw": "requests==2.31.0"
+    },
+    "jinja2": {
+      "version": "3.1.2",
+      "operator": "==",
+      "line": 35,
+      "raw": "Jinja2==3.1.2"
+    },
+    "gunicorn": {
+      "version": "21.2.0",
+      "operator": "==",
+      "line": 38,
+      "raw": "gunicorn==21.2.0"
+    },
+    "scipy": {
+      "version": "1.11.3",
+      "operator": "==",
+      "line": 41,
+      "raw": "scipy==1.11.3"
+    }
+  },
+  "python_version": "3.11",
+  "critical_libraries": {
+    "opencv-python-headless": {
+      "version": "4.8.1.78",
+      "status": "valid",
+      "description": "OpenCV for advanced face detection"
+    },
+    "rembg": {
+      "version": "2.0.50",
+      "status": "valid",
+      "description": "Background removal library"
+    },
+    "numpy": {
+      "version": "1.24.4",
+      "status": "valid",
+      "description": "Numerical computing library"
+    },
+    "pillow": {
+      "version": "10.0.1",
+      "status": "valid",
+      "description": "Image processing library"
+    },
+    "flask": {
+      "version": "2.3.3",
+      "status": "valid",
+      "description": "Web framework"
+    },
+    "boto3": {
+      "version": "1.29.7",
+      "status": "valid",
+      "description": "AWS SDK"
+    }
+  }
+}

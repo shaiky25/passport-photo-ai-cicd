@@ -1,0 +1,41 @@
+# Passport Photo AI - Enhanced Backend Requirements
+# Full ML/AI capabilities with OpenCV, rembg, and advanced processing
+# Optimized for t3.small instances (2 vCPU, 2GB RAM)
+
+# Core Flask dependencies
+Flask==2.3.3
+Flask-CORS==4.0.0
+Werkzeug==2.3.7
+
+# Image processing - Core
+Pillow==10.0.1
+pillow-heif==0.13.0
+
+# ML/AI Dependencies
+opencv-python-headless==4.8.1.78
+numpy==1.24.4
+rembg==2.0.50
+
+# Background removal models (rembg dependencies)
+onnxruntime==1.16.1
+scikit-image==0.21.0
+
+# AWS Services
+boto3==1.29.7
+botocore==1.32.7
+
+# Email and validation
+email-validator==2.0.0
+
+# Environment management
+python-dotenv==1.0.0
+
+# Utilities
+requests==2.31.0
+Jinja2==3.1.2
+
+# Production server
+gunicorn==21.2.0
+
+# Optional: Enhanced image processing
+scipy==1.11.3
